@@ -1,233 +1,143 @@
 import { NextResponse } from "next/server";
 
+export const maxDuration = 180;
+
+const GROQ_KEY = process.env.GROQ_API_KEY || "";
 export async function POST(req: Request) {
   try {
     const { prompt, errorContext, previousCode } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
-
     const isSelfHealing = Boolean(errorContext && previousCode);
 
-    const systemPrompt = `You are an expert autonomous 2D web game engineer.
-Output ONLY raw executable HTML containing <canvas id="gameCanvas"></canvas>, embedded <style>, and pure JavaScript inside <script> tags.
-Do NOT use markdown code fences. Output raw executable HTML only.
-Ensure the game runs immediately on load at 60fps with clear keyboard controls (Arrow keys or WASD) and collision logic.
-Always paint the background explicitly each frame inside the animation loop.`;
+    const systemPrompt = `You are an elite HTML5 Canvas 2D game architect.
+Given the user prompt, write a COMPLETE, custom, single-file HTML5 Canvas browser game.
+
+RULES:
+1. Return ONLY pure executable HTML starting directly with <!doctype html> and ending with </html>.
+2. Absolutely NO markdown backticks (no \`\`\`html or \`\`\`), no introductory or explanatory text.
+3. The HTML MUST contain:
+   <canvas id="gameCanvas" width="700" height="480"></canvas>
+4. Style:
+   * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+   body { background:#07090e; overflow:hidden; font-family:monospace; display:flex; justify-content:center; align-items:center; height:100vh; }
+   #gameCanvas { background:#0c101d; border:2px solid #38bdf8; box-shadow:0 0 30px rgba(56,189,248,0.25); border-radius:10px; cursor:crosshair; }
+5. Engine Specifications:
+   - Call window.focus() on start.
+   - Run 60 FPS requestAnimationFrame(loop) loop.
+   - Clear canvas every frame: ctx.fillStyle = '#0c101d'; ctx.fillRect(0, 0, 700, 480);
+   - Implement the EXACT gameplay, mechanics, controls, and scoring requested.
+   - Draw all scores and HUD directly on the canvas using ctx.fillText().
+   - Restart logic on Spacebar or click.
+   - Finish the entire script cleanly. Never stop halfway.`;
 
     const userMessage = isSelfHealing
-      ? `Fix this game crash:\nERROR: ${errorContext}\nCODE:\n${previousCode}`
-      : `Create a complete playable 2D HTML5 Canvas game: "${prompt}".`;
+      ? `FIX THIS RUNTIME ERROR:\n${errorContext}\n\nBROKEN SCRIPT:\n${previousCode}\n\nReturn complete working standalone HTML.`
+      : `Build this game in HTML5 Canvas: "${prompt}". Implement distinct mechanics, physics, and gameplay specifically matching this request.`;
 
-    let generatedHtml = "";
-
-    // 1. Try Gemini API across active candidate models if key exists
-    if (apiKey) {
-      const models = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-2.5-flash"];
-
-      for (const model of models) {
-        try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] }],
-                generationConfig: { temperature: 0.7 },
-              }),
-            }
+    // 1. Discover verified CHAT models only (ignoring audio/TTS/classifier models)
+    let selectedModel = "";
+    try {
+      const modelsRes = await fetch("https://api.groq.com/openai/v1/models", {
+        headers: { Authorization: `Bearer ${GROQ_KEY}` },
+      });
+      if (modelsRes.ok) {
+        const modelsData = await modelsRes.json();
+        const available: string[] = (modelsData.data || [])
+          .map((m: any) => m.id as string)
+          .filter(
+            (id: string) =>
+              !id.includes("whisper") &&
+              !id.includes("orpheus") &&
+              !id.includes("guard") &&
+              !id.includes("canopy")
           );
 
-          if (res.ok) {
-            const data = await res.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              generatedHtml = text
-                .replace(/^```html\s*/i, "")
-                .replace(/^```\s*/i, "")
-                .replace(/```$/i, "")
-                .trim();
-              break;
-            }
-          }
-        } catch {
-          // If network or 503 occurs, continue to fallback model
-        }
+        console.log("[GENESIS] Available Chat models on Groq:", available);
+
+        // Pick the best chat model from the verified list
+        selectedModel =
+          available.find((id) => id.includes("llama-3.3-70b-versatile")) ||
+          available.find((id) => id.includes("llama-3.1-8b-instant")) ||
+          available.find((id) => id.includes("gpt-oss-120b")) ||
+          available.find((id) => id.includes("gpt-oss-20b")) ||
+          available.find((id) => id.includes("qwen")) ||
+          available.find((id) => id.includes("mixtral")) ||
+          available[0];
       }
+    } catch (e: any) {
+      console.warn("[GENESIS] Model discovery failed:", e.message);
     }
 
-    // 2. High-Demand Resilient Fallback: Procedural Standalone Canvas Engine
-    // If Google servers are spiking (503), immediately return a fully playable Neon Space Dodger
-    if (!generatedHtml) {
-      generatedHtml = `<!doctype html>
-<html>
-<head>
- <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #080b12; }
-    #ui { position: absolute; top: 12px; left: 16px; color: #38bdf8; font-weight: bold; font-size: 14px; font-family: monospace; z-index: 10; }
-    #gameCanvas { display: block; width: 100%; height: 100%; object-fit: contain; background: #080b12; }
-  </style>
-</head>
-<body>
-  <div id="ui">SCORE: <span id="scoreVal">0</span> | LIVES: <span id="livesVal">3</span></div>
-  <canvas id="gameCanvas" width="700" height="480"></canvas>
-  <script>// Auto-focus window on load
-    window.focus();
-    window.addEventListener('click', () => {
-      window.focus();
-      if (gameOver) {
-        gameOver = false;
-        lives = 3;
-        score = 0;
-        player.x = 330;
-        asteroids.length = 0;
-        livesVal.innerText = lives;
-        scoreVal.innerText = score;
-      }
+    if (!selectedModel) {
+      selectedModel = "llama-3.3-70b-versatile";
+    }
+
+    console.log(`[GENESIS] Routing synthesis to: ${selectedModel}`);
+
+    // 2. Query Groq Chat Completions
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_KEY}`,
+      },
+      body: JSON.stringify({
+        model: selectedModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.6,
+        max_tokens: 4096,
+      }),
     });
 
-    window.addEventListener('keydown', (e) => { 
-      keys[e.key] = true; 
-      if (e.code === 'Space' && gameOver) {
-        gameOver = false;
-        lives = 3;
-        score = 0;
-        player.x = 330;
-        asteroids.length = 0;
-        livesVal.innerText = lives; 
-        scoreVal.innerText = score;
-      }
-    });
-    window.addEventListener('keyup', (e) => { keys[e.key] = false; });
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreVal = document.getElementById('scoreVal');
-    const livesVal = document.getElementById('livesVal');
-
-    let score = 0;
-    let lives = 3;
-    let gameOver = false;
-
-    window.__GAME_STATUS__ = "running";
-    window.__SCORE__ = score;
-
-    const player = { x: 330, y: 380, w: 32, h: 20, speed: 7, color: '#38bdf8' };
-    const keys = {};
-
-    window.addEventListener('keydown', (e) => { keys[e.key] = true; });
-    window.addEventListener('keyup', (e) => { keys[e.key] = false; });
-
-    const asteroids = [];
-    function spawnAsteroid() {
-      if(gameOver) return;
-      asteroids.push({
-        x: Math.random() * (canvas.width - 24),
-        y: -20,
-        size: 16 + Math.random() * 16,
-        speed: 3 + Math.random() * 3,
-        color: '#f43f5e'
-      });
-    }
-    setInterval(spawnAsteroid, 600);
-
-    function update() {
-      if (gameOver) return;
-
-      if ((keys['ArrowLeft'] || keys['a']) && player.x > 0) player.x -= player.speed;
-      if ((keys['ArrowRight'] || keys['d']) && player.x + player.w < canvas.width) player.x += player.speed;
-
-      for (let i = asteroids.length - 1; i >= 0; i--) {
-        const a = asteroids[i];
-        a.y += a.speed;
-
-        // Collision with player
-        if (
-          player.x < a.x + a.size &&
-          player.x + player.w > a.x &&
-          player.y < a.y + a.size &&
-          player.y + player.h > a.y
-        ) {
-          asteroids.splice(i, 1);
-          lives--;
-          livesVal.innerText = lives;
-          if (lives <= 0) {
-            gameOver = true;
-            window.__GAME_STATUS__ = "gameover";
-          }
-          continue;
-        }
-
-        // Passed screen
-        if (a.y > canvas.height) {
-          asteroids.splice(i, 1);
-          score += 10;
-          scoreVal.innerText = score;
-          window.__SCORE__ = score;
-        }
-      }
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Groq HTTP ${res.status}: ${errText}`);
     }
 
-    function draw() {
-      ctx.fillStyle = '#080b12';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#38bdf8';
-      ctx.fillStyle = player.color;
-      ctx.beginPath();
-      ctx.moveTo(player.x + player.w / 2, player.y);
-      ctx.lineTo(player.x, player.y + player.h);
-      ctx.lineTo(player.x + player.w, player.y + player.h);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+    const data = await res.json();
+    let rawCode = data.choices?.[0]?.message?.content || "";
 
-      // Starfield background
-      ctx.fillStyle = '#334155';
-      for(let i=0; i<30; i++) {
-        ctx.fillRect((i*37)%canvas.width, (i*67 + (Date.now()/50))%canvas.height, 2, 2);
-      }
-
-      // Draw Player Ship
-      ctx.fillStyle = player.color;
-      ctx.beginPath();
-      ctx.moveTo(player.x + player.w/2, player.y);
-      ctx.lineTo(player.x, player.y + player.h);
-      ctx.lineTo(player.x + player.w, player.y + player.h);
-      ctx.closePath();
-      ctx.fill();
-
-      // Draw Asteroids
-      for (const a of asteroids) {
-        ctx.fillStyle = a.color;
-        ctx.beginPath();
-        ctx.arc(a.x + a.size/2, a.y + a.size/2, a.size/2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (gameOver) {
-        ctx.fillStyle = '#f87171';
-        ctx.font = '24px monospace';
-        ctx.fillText('CRASH DETECTED - GAME OVER', 160, 240);
-      }
-
-      requestAnimationFrame(() => {
-        update();
-        draw();
-      });
+    if (rawCode.includes("\\n")) {
+      rawCode = rawCode
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"');
     }
 
-    draw();
-  </script>
-</body>
-</html>`;
+    rawCode = rawCode
+      .replace(/^```html\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+
+    const startIdx = rawCode.toLowerCase().indexOf("<!doctype");
+    if (startIdx !== -1) {
+      rawCode = rawCode.slice(startIdx);
+    } else {
+      const htmlIdx = rawCode.toLowerCase().indexOf("<html");
+      if (htmlIdx !== -1) rawCode = rawCode.slice(htmlIdx);
     }
 
-    return NextResponse.json({ success: true, gameHtml: generatedHtml });
+    const endIdx = rawCode.toLowerCase().lastIndexOf("</html>");
+    if (endIdx !== -1) {
+      rawCode = rawCode.slice(0, endIdx + 7);
+    }
+
+    rawCode = rawCode.trim();
+
+    if (!rawCode.includes("<canvas") || !rawCode.includes("<script")) {
+      throw new Error("Engine did not return a valid HTML canvas structure. Please try again.");
+    }
+
+    return NextResponse.json({ success: true, gameHtml: rawCode });
   } catch (error: any) {
+    console.error("[GENESIS API Error]", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to generate game" },
-      { status: 200 }
+      { success: false, error: error.message || "Synthesis failed" },
+      { status: 500 }
     );
   }
 }
