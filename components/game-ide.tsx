@@ -31,12 +31,13 @@ export function GameIde() {
     ['--:--:--', 'info', 'Genesis workspace ready'],
   ])
   const [status, setStatus] = useState<'idle' | 'generating' | 'running' | 'healing'>('idle')
-  const [hydrated, setHydrated] = useState(false)
+  // Keep the activity stream out of the server HTML because timestamps are client-local.
+  const [isMounted, setIsMounted] = useState(false)
   const [isPreviewFocused, setIsPreviewFocused] = useState(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
-    setHydrated(true)
+    setIsMounted(true)
   }, [])
 
   const addLog = (type: 'info' | 'success' | 'error', message: string) => {
@@ -151,7 +152,7 @@ export function GameIde() {
             </div>
             <button type="button" onClick={() => handleGenerate()} disabled={loading || !prompt.trim()} className="flex h-11 items-center justify-center gap-2 rounded-lg bg-[#9fc8bd] px-4 text-sm font-semibold text-[#13201e] shadow-sm transition hover:bg-[#b4d5cd] disabled:cursor-not-allowed disabled:opacity-45">{loading ? <LoaderCircle size={16} className="animate-spin" /> : <WandSparkles size={16} />}{loading ? 'Building prototype...' : 'Generate prototype'}</button>
           </div>
-          <div className="mt-6 border-t border-white/[0.08] pt-4"><div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[#7f8d8b]"><Terminal size={13} /> Activity</span><span className="text-[10px] text-[#697473]">LIVE</span></div><div className="flex max-h-32 flex-col gap-2 overflow-y-auto pr-1">{hydrated && logs.slice(-5).map(([time, type, message], idx) => <div key={idx} className="flex gap-2 text-[11px] leading-4"><span className="shrink-0 text-[#667270]">{time}</span><span className={type === 'success' ? 'text-[#8bc1ae]' : type === 'error' ? 'text-[#e39a91]' : 'text-[#aeb9b7]'}>{message}</span></div>)}</div></div>
+          <div className="mt-6 border-t border-white/[0.08] pt-4"><div className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-[#7f8d8b]"><Terminal size={13} /> Activity</span><span className="text-[10px] text-[#697473]">LIVE</span></div><div className="flex max-h-32 flex-col gap-2 overflow-y-auto pr-1">{isMounted && logs.slice(-5).map(([time, type, message], idx) => <div key={idx} className="flex gap-2 text-[11px] leading-4"><span className="shrink-0 text-[#667270]">{time}</span><span className={type === 'success' ? 'text-[#8bc1ae]' : type === 'error' ? 'text-[#e39a91]' : 'text-[#aeb9b7]'}>{message}</span></div>)}</div></div>
         </aside>
 
         <section className={`order-first flex min-h-[455px] min-w-0 flex-1 flex-col bg-[#111517] transition-all lg:order-none lg:min-h-0 ${isPreviewFocused ? 'lg:flex-[1.2]' : ''}`}>
