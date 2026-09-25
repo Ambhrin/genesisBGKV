@@ -34,7 +34,13 @@ export function GameIde() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const addLog = (type: 'info' | 'success' | 'error', message: string) => {
-    const time = new Date().toLocaleTimeString()
+    // Timestamps are created only in response to client-side activity, never during render.
+    const time = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    }).format(new Date())
     setLogs((prev) => [...prev, [time, type, message]])
   }
 
