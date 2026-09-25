@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Genesis Studio — Playable Prototypes',
+  description: 'Turn game ideas into playable browser prototypes with Genesis Studio.',
   generator: 'v0.app',
   icons: {
     icon: [
