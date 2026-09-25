@@ -28,7 +28,7 @@ export function GameIde() {
   const [gameHtml, setGameHtml] = useState('')
   const [copied, setCopied] = useState(false)
   const [logs, setLogs] = useState<LogEntry[]>([
-    [new Date().toLocaleTimeString(), 'info', 'Genesis workspace ready'],
+    ['--:--:--', 'info', 'Genesis workspace ready'],
   ])
   const [status, setStatus] = useState<'idle' | 'generating' | 'running' | 'healing'>('idle')
   const iframeRef = useRef<HTMLIFrameElement>(null)
